@@ -14,8 +14,9 @@
 #define sensorid "epalbrd"
 //#define sensorid "TSTPOS1"
 
-#define randomPin A1
 #define donePin A0
+#define randomPin A1
+#define somsPin A3
 #define sendTrials 5
 
 //lib required #define and global variable declarations
@@ -135,6 +136,14 @@ void loop(void)
   current_mA = ina219.getCurrent_mA();
   power_mW = ina219.getPower_mW();
 
+  float somsADC = 0;
+  float somsVWC = 0;
+  
+  somsADC = analogRead(somsPin);
+  //Serial.println(somsADC);
+  somsVWC = (0.004*somsADC) - 0.4839;
+  //Serial.println(somsVWC);
+  
   //declare line "packet" variables
   char line1[50] = "lgrid:";//axl gravity
   char line2[50] = "lgrid:";//axl mag
@@ -143,8 +152,9 @@ void loop(void)
   //build/parse the line packets
   buildLineAxl(line1,";AXL:",gx,gy,gz);
   buildLineAxl(line2,";MGR:",mx,my,mz);
-  buildLineOth(line3,busvoltage_V,current_mA,power_mW,1.234);
-
+  //buildLineOth(line3,busvoltage_V,current_mA,power_mW,1.234);
+  buildLineOth(line3,busvoltage_V,current_mA,power_mW,somsVWC);
+  
   //delete me
   //digitalWrite(A0,HIGH);
   //Serial.println("TPL 5110 failed");
