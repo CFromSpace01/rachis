@@ -14,6 +14,10 @@
 #define sensorid "epalbrd"
 //#define sensorid "TSTPOS1"
 
+#define randomPin A1
+#define donePin A0
+#define sendTrials 5
+
 //lib required #define and global variable declarations
 #define BNO055_SAMPLERATE_DELAY_MS (100)
 #define RFM95_CS 8
@@ -94,7 +98,7 @@ void setup(void)
   rf95.setTxPower(23, false);
 
   Serial.println("done initializing......\n");
-  randomSeed(analogRead(0));
+  randomSeed(analogRead(randomPin));
   delay(random(3000,4000));
   blinkled();
   Serial.println("done setup");
@@ -123,21 +127,23 @@ void loop(void)
   delay(BNO055_SAMPLERATE_DELAY_MS);
   Serial.println("here");
   //read current
-  float busvoltage = 0;
+  float busvoltage_V = 0;
   float current_mA = 0;
+  float power_mW = 0;
   
-  busvoltage = ina219.getBusVoltage_V();
+  busvoltage_V = ina219.getBusVoltage_V();
   current_mA = ina219.getCurrent_mA();
+  power_mW = ina219.getPower_mW();
 
   //declare line "packet" variables
   char line1[50] = "lgrid:";//axl gravity
   char line2[50] = "lgrid:";//axl mag
-  char line3[44] = "lgrid:";//ina power + soms
+  char line3[57] = "lgrid:";//ina power + soms
 
   //build/parse the line packets
-  buildLineAxl(line1,";axl:",gx,gy,gz);
-  buildLineAxl(line2,";mgr:",mx,my,mz);
-  buildLineOth(line3,busvoltage,current_mA,12345);
+  buildLineAxl(line1,";AXL:",gx,gy,gz);
+  buildLineAxl(line2,";MGR:",mx,my,mz);
+  buildLineOth(line3,busvoltage_V,current_mA,power_mW,1.234);
 
   //delete me
   //digitalWrite(A0,HIGH);
@@ -146,9 +152,10 @@ void loop(void)
   //transmit data
   sendLine(line1,50,1);
   sendLine(line2,50,2);
-  sendLine(line3,49,3);
+  sendLine(line3,57,3);
   
   Serial.println("#################################3");
+  analogWrite(donePin,HIGH);
   
   delay(8000);
 }
@@ -156,8 +163,9 @@ void loop(void)
 void sendLine(char* line,int inLen,int blinks){
   uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
   uint8_t  len = sizeof(buf);
+  int sendCounter = 0;
   do{
-    randomSeed(analogRead(0));
+    randomSeed(analogRead(randomPin));
     int del = random(1000,2000);
     Serial.print("..........................................");
     Serial.println(del);
@@ -193,6 +201,9 @@ void sendLine(char* line,int inLen,int blinks){
     {
       Serial.println("No reply, is there a listener around?");
     }
+
+    sendCounter++;
+    if(sendCounter > sendTrials-1) break;
   }while(strcmp((char*)buf,"ACK"));
 }
 
@@ -217,25 +228,30 @@ void buildLineAxl(char* line, char * type, float vx, float vy, float vz){
   Serial.println(line);
 }
 
-void buildLineOth(char* line, float vx, float vy, float vz){
+void buildLineOth(char* line, float vx, float vy, float vz, float vs){
   char fltString[4];assignNull(fltString);
   
   //line parsing
   strcat(line,sensorid);
   strcat(line,";");
   
-  strcat(line,"vol:");
-  dtostrf(vx,6,3,fltString);
+  strcat(line,"BTV:");
+  dtostrf(vx,6,2,fltString);
   strcat(line,fltString);
   strcat(line,";");
 
-  strcat(line,"cur:");
-  dtostrf(vy,6,3,fltString);
+  strcat(line,"BTA:");
+  dtostrf(vy,6,2,fltString);
+  strcat(line,fltString);
+  strcat(line,",");
+
+  strcat(line,"BTP:");
+  dtostrf(vz,6,2,fltString);
   strcat(line,fltString);
   strcat(line,",");
   
-  strcat(line,"som:");
-  dtostrf(vz,5,0,fltString);
+  strcat(line,"SMS:");
+  dtostrf(vs,5,3,fltString);
   strcat(line,fltString);
   
   Serial.println(line);
