@@ -11,7 +11,7 @@
 #include <SPI.h>
 #include <RH_RF95.h>
 
-#define sensorid "epalbrd"
+#define sensorid "eplbrd2"
 //#define sensorid "TSTPOS1"
 
 #define donePin A0
@@ -40,7 +40,8 @@ void setup(void)
   Serial.begin(9600);
   delay(2000);
   Serial.println(sensorid);Serial.println();
-    
+  //pinMode(donePin,OUTPUT);
+      
   Serial.println("Orientation Sensor Raw Data Test"); Serial.println("");
   
   /* Initialise the sensor */
@@ -154,7 +155,7 @@ void loop(void)
   buildLineAxl(line2,";MGR:",mx,my,mz);
   //buildLineOth(line3,busvoltage_V,current_mA,power_mW,1.234);
   buildLineOth(line3,busvoltage_V,current_mA,power_mW,somsVWC);
-  
+
   //delete me
   //digitalWrite(A0,HIGH);
   //Serial.println("TPL 5110 failed");
@@ -162,12 +163,12 @@ void loop(void)
   //transmit data
   sendLine(line1,50,1);
   sendLine(line2,50,2);
-  sendLine(line3,57,3);
+  sendLine(line3,58,3);
   
   Serial.println("#################################3");
-  analogWrite(donePin,HIGH);
-  
-  delay(8000);
+  digitalWrite(donePin,HIGH);
+  //exit(0);
+  //delay(10000);
 }
 
 void sendLine(char* line,int inLen,int blinks){
@@ -261,7 +262,7 @@ void buildLineOth(char* line, float vx, float vy, float vz, float vs){
   strcat(line,",");
   
   strcat(line,"SMS:");
-  dtostrf(vs,5,3,fltString);
+  dtostrf(vs,6,3,fltString);
   strcat(line,fltString);
   
   Serial.println(line);
