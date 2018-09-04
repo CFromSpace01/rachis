@@ -11,8 +11,10 @@
 #include <SPI.h>
 #include <RH_RF95.h>
 
-#define sensorid "eplbrd2"
-//#define sensorid "TSTPOS1"
+#define SENSEID "03"
+#define AREA "BCM"
+#define SITE "PDE"
+#define terminator "$"
 
 #define donePin A0
 #define randomPin A1
@@ -39,7 +41,7 @@ void setup(void)
 {
   Serial.begin(9600);
   delay(2000);
-  Serial.println(sensorid);Serial.println();
+  Serial.println(SENSEID);Serial.println();
   //pinMode(donePin,OUTPUT);
       
   Serial.println("Orientation Sensor Raw Data Test"); Serial.println("");
@@ -49,7 +51,7 @@ void setup(void)
   {
     /* There was a problem detecting the BNO055 ... check your connections */
     Serial.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
-    while(1);
+    //while(1);
   }
   
   delay(1000);
@@ -146,24 +148,28 @@ void loop(void)
   //Serial.println(somsVWC);
   
   //declare line "packet" variables
-  char line1[50] = "lgrid:";//axl gravity
-  char line2[50] = "lgrid:";//axl mag
-  char line3[57] = "lgrid:";//ina power + soms
+  char line1[72] = AREA;//axl mag/
+  char line2[49] = AREA;//power
+  char line3[27] = AREA;//soms
 
   //build/parse the line packets
-  buildLineAxl(line1,";AXL:",gx,gy,gz);
-  buildLineAxl(line2,";MGR:",mx,my,mz);
-  //buildLineOth(line3,busvoltage_V,current_mA,power_mW,1.234);
-  buildLineOth(line3,busvoltage_V,current_mA,power_mW,somsVWC);
+  buildLine_01(line1,gx,gy,gz,mx,my,mz);
+  buildLine_02(line2,busvoltage_V,current_mA,power_mW);
+  buildLine_03(line3,somsVWC);
+  
+//  buildLineAxl(line1,";AXL:",gx,gy,gz);
+//  buildLineAxl(line2,";MGR:",mx,my,mz);
+//  //buildLineOth(line3,busvoltage_V,current_mA,power_mW,1.234);
+//  buildLineOth(line3,busvoltage_V,current_mA,power_mW,somsVWC);
 
   //delete me
   //digitalWrite(A0,HIGH);
   //Serial.println("TPL 5110 failed");
 
   //transmit data
-  sendLine(line1,50,1);
-  sendLine(line2,50,2);
-  sendLine(line3,58,3);
+  sendLine(line1,71,1);
+  sendLine(line2,48,2);
+  sendLine(line3,26,3);
   
   Serial.println("#################################3");
   digitalWrite(donePin,HIGH);
@@ -218,53 +224,94 @@ void sendLine(char* line,int inLen,int blinks){
   }while(strcmp((char*)buf,"ACK"));
 }
 
-void buildLineAxl(char* line, char * type, float vx, float vy, float vz){
-  char axlString[4];assignNull(axlString);
+void buildID(char* line,char* sensor){
+  strcat(line,"-");
+  strcat(line,SITE);
+  strcat(line,"-");
+  strcat(line,sensor);
+  strcat(line,SENSEID);
+  strcat(line,terminator);
+}
+
+void buildLine_01(char* line, float vx, float vy, float vz,
+  float wx, float wy, float wz){
   
-  //line parsing
-  strcat(line,sensorid);
-  strcat(line,type);
+  char sensorType[4] =  "TLT";
+  char tmpString[7];assignNull(tmpString);
   
-  dtostrf(vx,7,4,axlString);
-  strcat(line,axlString);
+  buildID(line,sensorType);
+  
+  //parse axl data here
+  strcat(line,"AXL:");
+  
+  dtostrf(vx,7,4,tmpString);
+  strcat(line,tmpString);
   strcat(line,",");
   
-  dtostrf(vy,7,4,axlString);
-  strcat(line,axlString);
+  dtostrf(vy,7,4,tmpString);
+  strcat(line,tmpString);
   strcat(line,",");
   
-  dtostrf(vz,7,4,axlString);
-  strcat(line,axlString);
+  dtostrf(vz,7,4,tmpString);
+  strcat(line,tmpString);
+  strcat(line,";");
+
+  //parse magnetometer data here
+  strcat(line,"MGR:");
   
+  dtostrf(wx,7,4,tmpString);
+  strcat(line,tmpString);
+  strcat(line,",");
+
+  dtostrf(wy,7,4,tmpString);
+  strcat(line,tmpString);
+  strcat(line,",");
+  
+  dtostrf(wz,7,4,tmpString);
+  strcat(line,tmpString);
+  
+  //concatenate terminating character
+  strcat(line,"$");
   Serial.println(line);
 }
 
-void buildLineOth(char* line, float vx, float vy, float vz, float vs){
-  char fltString[4];assignNull(fltString);
+void buildLine_02(char* line, float vx, float vy, float vz){
+  char sensorType[4] = "SLR";
+  char tmpString[6];assignNull(tmpString);
   
-  //line parsing
-  strcat(line,sensorid);
-  strcat(line,";");
+  buildID(line,sensorType);
   
+  //parse ina219 data here
   strcat(line,"BTV:");
-  dtostrf(vx,6,2,fltString);
-  strcat(line,fltString);
+  dtostrf(vx,6,2,tmpString);
+  strcat(line,tmpString);
   strcat(line,";");
 
   strcat(line,"BTA:");
-  dtostrf(vy,6,2,fltString);
-  strcat(line,fltString);
-  strcat(line,",");
+  dtostrf(vy,6,2,tmpString);
+  strcat(line,tmpString);
+  strcat(line,";");
 
   strcat(line,"BTP:");
-  dtostrf(vz,6,2,fltString);
-  strcat(line,fltString);
-  strcat(line,",");
+  dtostrf(vz,6,2,tmpString);
+  strcat(line,tmpString);
   
-  strcat(line,"SMS:");
-  dtostrf(vs,6,3,fltString);
-  strcat(line,fltString);
+  //concatenate terminating character
+  strcat(line,"$");
+  Serial.println(line);
+}//end of fxn
+
+void buildLine_03(char* line, float vs){
+  char sensorType[4] = "SMS";
+  char tmpString[6];assignNull(tmpString);
   
+  buildID(line,sensorType);
+  strcat(line,"VWC:");
+  dtostrf(vs,6,3,tmpString);
+  strcat(line,tmpString);
+  
+  //concatenate terminating character
+  strcat(line,"$");
   Serial.println(line);
 }
 
