@@ -1,5 +1,17 @@
 #include <avr/dtostrf.h>
 
+//define sensor name/s
+#define SENSEID "04"
+#define AREA "BCM"
+#define SITE "PDE"
+#define terminator "$"
+
+//define pin assignments
+#define donePin A0	//done pin for tpl
+#define randomPin A1	//pin for generating random seed for random delay when sending
+#define somsPin A3	//SOMS input
+#define sendTrials 5	//number of send retries before exit
+
 //lib required #includes
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BNO055.h>
@@ -11,15 +23,6 @@
 #include <SPI.h>
 #include <RH_RF95.h>
 
-#define SENSEID "03"
-#define AREA "BCM"
-#define SITE "PDE"
-#define terminator "$"
-
-#define donePin A0
-#define randomPin A1
-#define somsPin A3
-#define sendTrials 5
 
 //lib required #define and global variable declarations
 #define BNO055_SAMPLERATE_DELAY_MS (100)
@@ -30,8 +33,6 @@
 
 Adafruit_BNO055 bno = Adafruit_BNO055();
 
-int AXLadr = 0x28;
-
 Adafruit_INA219 ina219;
 
 // Singleton instance of the radio driver
@@ -40,9 +41,10 @@ RH_RF95 rf95(RFM95_CS, RFM95_INT);
 void setup(void)
 {
   Serial.begin(9600);
-  delay(2000);
+  delay(2000);//put 2 sec delay to allow serial monitor to open
   Serial.println(SENSEID);Serial.println();
-  //pinMode(donePin,OUTPUT);
+  
+  pinMode(donePin,OUTPUT);
       
   Serial.println("Orientation Sensor Raw Data Test"); Serial.println("");
   
@@ -50,28 +52,21 @@ void setup(void)
   if(!bno.begin())
   {
     /* There was a problem detecting the BNO055 ... check your connections */
-    Serial.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
+    Serial.println("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
     //while(1);
   }
-  
+  //delay 1000 before setting axl settings
   delay(1000);
-  
-  /* Display the current temperature */
-  int8_t temp = bno.getTemp();
-  Serial.print("Current Temperature: ");
-  Serial.print(temp);
-  Serial.println(" C");
-  Serial.println("");
-
   bno.setExtCrystalUse(true);
 
   Serial.println("Calibration status values: 0=uncalibrated, 3=fully calibrated");
   
- //start current sense
+  //initialize ina219
   uint32_t currentFrequency;
   ina219.begin();
   Serial.println("initializing ina219 done");
   
+  //initialize rf module
   //Start rx
   pinMode(RFM95_RST, OUTPUT);
   digitalWrite(RFM95_RST, HIGH);
@@ -86,6 +81,7 @@ void setup(void)
   digitalWrite(RFM95_RST, HIGH);
   delay(10);
 
+  //do not continue if rf is not okay
   while (!rf95.init()) {
     Serial.println("LoRa radio init failed");
     while (1);
@@ -101,9 +97,7 @@ void setup(void)
   
   rf95.setTxPower(23, false);
 
-  Serial.println("done initializing......\n");
-  randomSeed(analogRead(randomPin));
-  delay(random(3000,4000));
+  //randomSeed(analogRead(randomPin));
   blinkled();
   Serial.println("done setup");
 }
@@ -114,11 +108,11 @@ void loop(void)
 {
   Serial.println("begin loop");
   
+  //Read data from axl
   imu::Vector<3> grvty = bno.getVector(Adafruit_BNO055::VECTOR_GRAVITY);
   imu::Vector<3> mgntr = bno.getVector(Adafruit_BNO055::VECTOR_MAGNETOMETER);
-  Serial.println("done init axl variables");
+  Serial.println("done initializing axl variables");
   
-  //Read data from sensors: [1] axl (g's), [2] axl (m's), [3] power, [4] soms
   char axlX[4];assignNull(axlX);
   float gx = grvty.x()/9.8;
   float gy = grvty.y()/9.8;
@@ -129,8 +123,7 @@ void loop(void)
   float mz = mgntr.z()/9.8;
   
   delay(BNO055_SAMPLERATE_DELAY_MS);
-  Serial.println("here");
-  //read current
+  //read power
   float busvoltage_V = 0;
   float current_mA = 0;
   float power_mW = 0;
@@ -139,15 +132,14 @@ void loop(void)
   current_mA = ina219.getCurrent_mA();
   power_mW = ina219.getPower_mW();
 
+  //read soms
   float somsADC = 0;
   float somsVWC = 0;
   
   somsADC = analogRead(somsPin);
-  //Serial.println(somsADC);
-  somsVWC = (0.004*somsADC) - 0.4839;
-  //Serial.println(somsVWC);
+  somsVWC = (0.004*somsADC) - 0.4839;//calibration equation from reference paper
   
-  //declare line "packet" variables
+  //declare message variables
   char line1[72] = AREA;//axl mag/
   char line2[49] = AREA;//power
   char line3[27] = AREA;//soms
@@ -157,15 +149,6 @@ void loop(void)
   buildLine_02(line2,busvoltage_V,current_mA,power_mW);
   buildLine_03(line3,somsVWC);
   
-//  buildLineAxl(line1,";AXL:",gx,gy,gz);
-//  buildLineAxl(line2,";MGR:",mx,my,mz);
-//  //buildLineOth(line3,busvoltage_V,current_mA,power_mW,1.234);
-//  buildLineOth(line3,busvoltage_V,current_mA,power_mW,somsVWC);
-
-  //delete me
-  //digitalWrite(A0,HIGH);
-  //Serial.println("TPL 5110 failed");
-
   //transmit data
   sendLine(line1,71,1);
   sendLine(line2,48,2);
@@ -177,17 +160,19 @@ void loop(void)
   //delay(10000);
 }
 
+//send message using rf. inLen variable is the number of characters to be sent. blinks variable determines the number of times led will blink before sending. used primarily for determining which line is being sent
 void sendLine(char* line,int inLen,int blinks){
   uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
   uint8_t  len = sizeof(buf);
   int sendCounter = 0;
   do{
     randomSeed(analogRead(randomPin));
-    int del = random(1000,2000);
+    int del = random(1,30) * 100;//random delay between 100 - 3000 ms
     Serial.print("..........................................");
     Serial.println(del);
-    for(int i=0;i<blinks;i++)blinkled();
+    for(int i=0;i<blinks;i++)blinkled();//blink 
     
+	//send data
     Serial.print("Sending "); Serial.println(line);
     Serial.println("Sending...");
     delay(10);
@@ -219,11 +204,13 @@ void sendLine(char* line,int inLen,int blinks){
       Serial.println("No reply, is there a listener around?");
     }
 
+	//check if # of retries is still valid or until an ACK is rcvd
     sendCounter++;
     if(sendCounter > sendTrials-1) break;
   }while(strcmp((char*)buf,"ACK"));
 }
 
+//parses the id part of the message to be sent
 void buildID(char* line,char* sensor){
   strcat(line,"-");
   strcat(line,SITE);
@@ -233,6 +220,7 @@ void buildID(char* line,char* sensor){
   strcat(line,terminator);
 }
 
+//parses the data part of the message to be sent
 void buildLine_01(char* line, float vx, float vy, float vz,
   float wx, float wy, float wz){
   
@@ -275,6 +263,7 @@ void buildLine_01(char* line, float vx, float vy, float vz,
   Serial.println(line);
 }
 
+//parses the data part of the message to be sent
 void buildLine_02(char* line, float vx, float vy, float vz){
   char sensorType[4] = "SLR";
   char tmpString[6];assignNull(tmpString);
@@ -301,6 +290,7 @@ void buildLine_02(char* line, float vx, float vy, float vz){
   Serial.println(line);
 }//end of fxn
 
+//parses the data part of the message to be sent
 void buildLine_03(char* line, float vs){
   char sensorType[4] = "SMS";
   char tmpString[6];assignNull(tmpString);
