@@ -1,7 +1,7 @@
 #include <avr/dtostrf.h>
 
 //define sensor name/s
-#define SENSEID "04"
+#define SENSEID "07"
 #define AREA "BCM"
 #define SITE "PDE"
 #define terminator "$"
@@ -23,7 +23,6 @@
 #include <SPI.h>
 #include <RH_RF95.h>
 
-
 //lib required #define and global variable declarations
 #define BNO055_SAMPLERATE_DELAY_MS (100)
 #define RFM95_CS 8
@@ -31,7 +30,7 @@
 #define RFM95_INT 3
 #define RF95_FREQ 433.0
 
-Adafruit_BNO055 bno = Adafruit_BNO055();
+Adafruit_BNO055 bno = Adafruit_BNO055(55);
 
 Adafruit_INA219 ina219;
 
@@ -53,10 +52,10 @@ void setup(void)
   {
     /* There was a problem detecting the BNO055 ... check your connections */
     Serial.println("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
-    //while(1);
+    while(1);
   }
   //delay 1000 before setting axl settings
-  delay(1000);
+  delay(2000);
   bno.setExtCrystalUse(true);
 
   Serial.println("Calibration status values: 0=uncalibrated, 3=fully calibrated");
@@ -107,6 +106,8 @@ int16_t packetnum = 0;  // packet counter, we increment per xmission
 void loop(void)
 {
   Serial.println("begin loop");
+
+  delay(BNO055_SAMPLERATE_DELAY_MS*2);
   
   //Read data from axl
   imu::Vector<3> grvty = bno.getVector(Adafruit_BNO055::VECTOR_GRAVITY);
@@ -122,7 +123,6 @@ void loop(void)
   float my = mgntr.y()/9.8;
   float mz = mgntr.z()/9.8;
   
-  delay(BNO055_SAMPLERATE_DELAY_MS);
   //read power
   float busvoltage_V = 0;
   float current_mA = 0;
