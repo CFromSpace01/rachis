@@ -1,3 +1,10 @@
+/*
+Onomastics(?): Rachis is stem part of a feather. The board used for this development was an Adafruit feather. I think.
+
+Description: polls data from multiple sensors and sends the data to a host via an RF module.
+*/
+
+
 #include <avr/dtostrf.h>
 
 //define sensor name/s
